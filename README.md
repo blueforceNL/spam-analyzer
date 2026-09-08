@@ -11,7 +11,7 @@ apt-get install libmagic1 python3-pip python3-magic python3-psutil python3-tld
 
 Clone the spam-analyzer Git repository and move the directory into /opt/, from where we will run it as a daemonized application. Also change the permissions from presumably root to sinkhole, the user that will run the software.
 ```
-git clone git@github.com:threat-intelligence/spam-trap/spam-analyzer.git
+git clone git@github.com:blueforceNL/spam-analyzer.git
 mv spam-analyzer /opt/
 chown -R sinkhole:sinkhole /opt/spam-analyzer
 ```
