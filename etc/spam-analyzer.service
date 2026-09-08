@@ -1,0 +1,14 @@
+[Unit]
+Description=Spam analyzer
+After=postfix.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=sinkhole
+WorkingDirectory=/opt/spam-analyzer
+ExecStart=python3 spam_analyzer.py
+
+[Install]
+WantedBy=multi-user.target
