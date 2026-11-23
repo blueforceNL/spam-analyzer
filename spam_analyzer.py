@@ -661,7 +661,8 @@ else:
 
 									# Attachments can also have filenames with slashes in them, and they are forbidden on Linux filesystems. Therefore, we will
 									# encode these with URL encoding and replace with: '%2F'. We also store a filename of at most 128 characters (excluding null).
-									disk_attachment_filename = disk_attachment_filename.replace("/", "%2F")[:127]
+									# Also remove double dot patterns, replace them with an underscore.
+									disk_attachment_filename = disk_attachment_filename.replace("/", "%2F").replace("..", "_")[:127]
 
 									# Now insert a new link between the selected or inserted attachment and the current mail message entry. We specify the filename here because the same attachment can have a different (relevant) filename in different messages.
 									query = "INSERT INTO mail_attachment_link (mail_id,attachment_id,filename,filename_on_disk) VALUES (%s,%s,%s,%s)"
