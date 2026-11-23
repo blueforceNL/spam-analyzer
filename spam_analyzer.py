@@ -432,7 +432,7 @@ else:
 							result = analyze_mail_message(mail_bytes, dnsfilter_domain_rankings, int(analyzer_config["max_number_of_urls_in_body"]))
 						except Exception as e:
 							logger.error("An error occurred processing %s. Message: %s" % (m, str(e)))
-							result["ok"] = False
+							result = { "ok" : False }
 
 					# Analyze the result.
 					total_mails_processed += 1
