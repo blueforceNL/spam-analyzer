@@ -34,17 +34,17 @@ DNSFILTER_PULL_LATEST_SCRIPT_FILENAME = "analysis/get_dnsfilter_latest.sh"
 # Database functions.                                       |
 # ----------------------------------------------------------|
 
-# Executes a mutation query (INSERT, UPDATE, etc) to the MySQL database server.
+# Executes a mutation query (INSERT, UPDATE, etc) to the MySQL database server. Requires to be parameterized for SQL injection protection.
 def execute_mutation_sql_query(db, q, params):
 	cursorObject = db.cursor()
 	cursorObject.execute(q, params)
 	db.commit()
 	return cursorObject.lastrowid
 
-# Executes a SELECT query that returns results.
-def execute_select_sql_query(db, q):
+# Executes a SELECT query that returns results. Also a parameterized function to safeguard against SQL injection.
+def execute_select_sql_query(db, q, params):
 	cursorObject = db.cursor(buffered=True)
-	cursorObject.execute(q)
+	cursorObject.execute(q, params)
 	db.commit()
 	return cursorObject.fetchall()
 
@@ -54,12 +54,12 @@ def execute_select_sql_query(db, q):
 # This check includes the inactive queue, because the IP might already be there waiting for processing too.
 def enqueue_indicator_for_enricher(database, indicator, mail_id):
 	# Query the primary queue first to see if the indicator is already queued.
-	queue_entries_result = execute_select_sql_query(database, "SELECT id FROM enricher_queue WHERE checksum = CRC32('%s')" % indicator)
+	queue_entries_result = execute_select_sql_query(database, "SELECT id FROM enricher_queue WHERE checksum = CRC32(%s)", (indicator,))
 	if len(queue_entries_result) > 0:
 		return
 
 	# Query the inactive entries queue as well to see if the indicator was already queued before a longer time ago.
-	inactive_entries_result = execute_select_sql_query(database, "SELECT id FROM inactive_enricher_queue WHERE checksum = CRC32('%s')" % indicator)
+	inactive_entries_result = execute_select_sql_query(database, "SELECT id FROM inactive_enricher_queue WHERE checksum = CRC32(%s)", (indicator,))
 	if len(inactive_entries_result) > 0:
 		return
 
@@ -124,10 +124,10 @@ def purge_mail_message_analysis_from_database(mail_id):
 		execute_mutation_sql_query(database, "DELETE FROM mail_message_bodies WHERE mail_id = %s", (mail_id,))
 
 		# Delete any linked classification including loose ends like indicators if applicable.
-		detection_link_result = execute_select_sql_query(database, ("SELECT id FROM mail_classifications_link WHERE mail_id = %i" % mail_id))
+		detection_link_result = execute_select_sql_query(database, "SELECT id FROM mail_classifications_link WHERE mail_id = %s", (mail_id,))
 		for entry in detection_link_result:
 			# Select all indicators linked to this detection. We want to check if any of those have more than one reference.
-			classification_indicators_result = execute_select_sql_query(database, ("SELECT indicator_id FROM indicator_classification_link WHERE classifications_link_id = %i" % entry[0]))
+			classification_indicators_result = execute_select_sql_query(database, "SELECT indicator_id FROM indicator_classification_link WHERE classifications_link_id = %s", (entry[0],))
 
 			# Remove the link to the indicator from the given mail ID. Then, only other links will appear below and we should not touch them.
 			execute_mutation_sql_query(database, "DELETE FROM indicator_classification_link WHERE classifications_link_id = %s", (entry[0],))
@@ -135,7 +135,7 @@ def purge_mail_message_analysis_from_database(mail_id):
 			# Iterate over the linked indicators to see if there are any other links remaining.
 			for linked_indicator in classification_indicators_result:
 				# Select all indicator links with the same ID as this one, having a different classification ID.
-				other_indicator_links_result = execute_select_sql_query(database, ("SELECT id FROM indicator_classification_link WHERE indicator_id = %i" % (linked_indicator[0],)))
+				other_indicator_links_result = execute_select_sql_query(database, "SELECT id FROM indicator_classification_link WHERE indicator_id = %s", (linked_indicator[0],))
 				if len(other_indicator_links_result) == 0:
 					# No other links to this indicator exist, and therefore, we can remove the indicator from the database as well.
 					execute_mutation_sql_query(database, "DELETE FROM indicators WHERE id = %s", (linked_indicator[0],))
@@ -427,7 +427,7 @@ else:
 						# Check if reanalysis is allowed. If so, we will not have to perform the MD5 check.
 						if not reanalysis_allowed:
 							# Query the analyzed mail table to see if the MD5 checksum is already stored there.
-							checksum_result = execute_select_sql_query(database, "SELECT id FROM analyzed_mail WHERE md5_hash = 'X%s'" % msg_md5)
+							checksum_result = execute_select_sql_query(database, "SELECT id FROM analyzed_mail WHERE md5_hash = X%s", (msg_md5,))
 							if len(checksum_result) > 0:
 								logger.info("Message file: %s has already been analyzed. Skipping and removing the message." % m)
 								os.remove(absolute_filename)
@@ -504,7 +504,7 @@ else:
 							mail_domain = mail_parts[1].strip("<>")
 
 							# Get current statistics for sinkholed domain.
-							domain_stats = execute_select_sql_query(database, "SELECT id,incoming_mails,malicious_mails FROM domains WHERE domain = '%s'" % mail_domain)
+							domain_stats = execute_select_sql_query(database, "SELECT id,incoming_mails,malicious_mails FROM domains WHERE domain = %s", (mail_domain,))
 							if len(domain_stats) == 1:
 								# Set incremented counters in the database.
 								current_stats = domain_stats[0]
@@ -521,11 +521,11 @@ else:
 							else:
 								logger.warning("Obtained %i rows from domains query while 0 or 1 was expected! Sender email: %s" % (len(domain_stats), result["recipient"]))
 						else:
-							logger.warning("Invalid email address detected in recipient field: %s (statistics not updated)" % result["recipient"])
+							logger.warning("Invalid email address detected in recipient field: %s in file: %s (statistics not updated)." % (result["recipient"], m))
 
 						# Query the analyzed mail table to see whether this mail was already analyzed. We have a unique constraint on the filename to counter duplicates.
 						# If the mail already exists in the database, we do want to re-analyze it and therefore, we have to purge everything related to this mail from the database.
-						analyzed_mail_entry = execute_select_sql_query(database, "SELECT id FROM analyzed_mail WHERE filename = '%s'" % mail_filename)
+						analyzed_mail_entry = execute_select_sql_query(database, "SELECT id FROM analyzed_mail WHERE filename = %s", (mail_filename,))
 						if len(analyzed_mail_entry) > 0:
 							# Check whether reanalysis is allowed by configuration.
 							if reanalysis_allowed:
@@ -634,7 +634,7 @@ else:
 										attachment_filename = attach_obj["filename"][:79]
 
 									# Get the MIME type string and find it in the database.
-									mime_type_res = execute_select_sql_query(database, "SELECT id FROM mime_types WHERE description = '%s'" % attach_obj["mime_type"])
+									mime_type_res = execute_select_sql_query(database, "SELECT id FROM mime_types WHERE description = %s", (attach_obj["mime_type"],))
 									if len(mime_type_res) == 1:
 										mime_type_first_row = mime_type_res[0]
 										mime_type_id = mime_type_first_row[0]
@@ -645,7 +645,7 @@ else:
 										logger.debug("Added new MIME type: %s to database. Attachment: %s from mail message: %s has this type." % (attach_obj["mime_type"], attachment_filename, m))
 
 									# MIME type is either inserted into the database or the correct ID has been retrieved. Now check whether the attachment with given SHA-256 hash is already in the database or it needs to be inserted.
-									attachment_res = execute_select_sql_query(database, "SELECT id FROM potentially_malicious_attachments WHERE sha256_hash = X'%s'" % attach_obj["sha256"])
+									attachment_res = execute_select_sql_query(database, "SELECT id FROM potentially_malicious_attachments WHERE sha256_hash = X%s", (attach_obj["sha256"],))
 									if len(attachment_res) == 1:
 										attachment_res_first_row = attachment_res[0]
 										attachment_id = attachment_res_first_row[0]
