@@ -230,7 +230,7 @@ def parse_multipart_message(message, bounced):
 			# Inline pictures will be skipped for now, but FIXME for later is to see how we should do this right.
 			content_type = str(part.get("Content-Type"))
 			content_type_props = parse_content_type(content_type)
-			if content_type_props is not None:
+			if content_type_props is not None and "mime_type" in content_type_props:
 				if content_type_props["mime_type"] == "text/plain" or content_type_props["mime_type"] == "text/html":
 					# Obtain charset from content type if applicable.
 					charset = "utf-8"
