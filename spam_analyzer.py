@@ -172,16 +172,6 @@ def exotic_codec_mapper(codec_name):
 # Main analyzer component code                              |
 # ----------------------------------------------------------|
 
-# Do initial tasks for starting the analyzer. We initialize a logger that targets systemd.
-logger = logging.getLogger("spam-analyzer")
-journald_handler = journal.JournaldLogHandler()
-journald_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-logger.setLevel(logging.INFO)
-logger.addHandler(journald_handler)
-
-# We have to hack an alias for the broken encoding reference in the encodings table.
-codecs.register(exotic_codec_mapper)
-
 # Allow single-mail debugging by checking for a filename argument. If a file is specified, we just analyze the single mail file and exit.
 parser = argparse.ArgumentParser(description='Spam mail analyzer')
 parser.add_argument('filename', nargs='?')
@@ -189,19 +179,35 @@ parser.add_argument('-s', action='store_true', dest='store_attachments', help='S
 parser.add_argument('-v', action='store_true', dest='verbose', help='Verbose mode, print mail message body in debug mode')
 parser.add_argument('-d', action='store_true', dest='decode_html', help='Decode HTML email body, only in debug mode')
 args = parser.parse_args()
+
+# We have to hack an alias for the broken encoding reference in the encodings table.
+codecs.register(exotic_codec_mapper)
+
+# Do initial tasks for starting the analyzer. We initialize a logger that targets systemd.
+logger = logging.getLogger("spam-analyzer")
+journald_handler = journal.JournaldLogHandler()
+journald_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+
+# Test whether debug mode is activated.
 debug = False
 if args.filename:
 	# Get filename from second argument.
 	if os.path.isfile(args.filename):
 		debug = True
 		logger.setLevel(logging.DEBUG)
-		logger.addHandler(logging.StreamHandler(sys.stdout))
-		print("Running in single-file mode for debugging! Database connection turned off.")
+		stdout_handler = logging.StreamHandler(sys.stdout)
+		stdout_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+		logger.addHandler(stdout_handler)
+		logger.info("Running in single-file mode for debugging! Database connection turned off.")
 		if args.verbose:
-			print("Verbose mode enabled.")
+			logger.info("Verbose mode enabled.")
 	else:
 		logger.error("First argument: %s must be a filename but file does not exist! Exiting." % sys.argv[1])
 		exit(1)
+
+# Still here, so running in service mode. Set journald handler.
+logger.setLevel(logging.INFO)
+logger.addHandler(journald_handler)
 
 # Create or load the configuration.
 try:
@@ -288,7 +294,7 @@ if debug:
 			# Get mail domain.
 			mail_parts = result["recipient"].split('@')
 			if len(mail_parts) > 1:
-				print("Email domain: %s" % mail_parts[1].strip("<>"))
+				logger.info("Email domain: %s" % mail_parts[1].strip("<>"))
 
 			# Print analysis results.
 			logger.info("Date: %s, Sender IP: %s, Subject: %s" % (mail_date_str, sender_ip, truncated_subject))
