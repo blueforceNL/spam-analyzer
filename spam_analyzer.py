@@ -499,6 +499,8 @@ else:
 
 						# Get the domain from the recipient address and update the counters in the database.
 						mail_parts = result["recipient"].split('@')
+						domain_id = None
+						mail_domain = None
 						if len(mail_parts) >= 2:
 							# Strip some common auxiliary characters from the domain, just in case.
 							mail_domain = mail_parts[1].strip("<>")
@@ -568,12 +570,15 @@ else:
 							continue
 
 						# Mail message metadata was successfully inserted into the database and a new domain was successfully inserted as well.
-						# Now we can safely update the domain stats.
-						inc_mails = current_incoming + 1
-						mal_inc = 1 if result["potentially_malicious"] else 0
-						mal_mails = current_malicious + mal_inc
-						update_query = "UPDATE domains SET incoming_mails = %s,malicious_mails = %s WHERE domain = %s"
-						execute_mutation_sql_query(database, update_query, (inc_mails, mal_mails, mail_domain))
+						# Now we can safely update the domain stats, but only if domain detection succeeded.
+						if domain_id and mail_domain:
+							inc_mails = current_incoming + 1
+							mal_inc = 1 if result["potentially_malicious"] else 0
+							mal_mails = current_malicious + mal_inc
+							update_query = "UPDATE domains SET incoming_mails = %s,malicious_mails = %s WHERE domain = %s"
+							execute_mutation_sql_query(database, update_query, (inc_mails, mal_mails, mail_domain))
+						else:
+							logger.warning("Receiver domain detection failed! Not updating counters. Message file: %s" % m)
 
 						# Analyze all results in case the mail is potentially malicious.
 						if result["potentially_malicious"]:
