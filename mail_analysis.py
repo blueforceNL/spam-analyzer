@@ -383,17 +383,22 @@ def analyze_mail_message(msg_bytes, dnsfilter_domain_rankings, total_num_url_thr
 
 		# Decode and extract the payload from the message. If we encounter an empty message, we can ignore the contents.
 		body_raw = message.get_payload(decode=True)
-		if body_raw is None:
-			# Decode the message body part.
-			decoded_msg = decode_message_body_part(part, message_charset)
-			if decoded_msg is not None:
-				# Failed to decode, return a parse failure for further investigation.
-				result["ok"] = False
-				return result
+		if body_raw:
+			# Get decoded payload and convert.
+			try:
+				decoded_msg = body_raw.decode(message_charset)
+			except (UnicodeDecodeError, LookupError):
+				# We encountered an unknown encoding in the mail headers. Try to decode it in default 8-bit or fail if it doesn't work.
+				try:
+					decoded_msg = body_raw.decode(DEFAULT_BODY_CHARSET)
+				except (UnicodeDecodeError, LookupError):
+					# Failed to decode, return a parse failure for further investigation.
+					result["ok"] = False
+					return result
 
 			# Append the decoded payload to the (raw) message body.
-			raw_message_body.extend(decoded_msg[0])
-			message_body += decoded_msg[1]
+			raw_message_body.extend(body_raw)
+			message_body += decoded_msg
 
 	# If the message was detected as bounced but no subject has been found so far, it means the subject header probably resides somewere in the body.
 	if result["bounced"] and "bounced_subject" not in result:
