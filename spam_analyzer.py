@@ -322,7 +322,7 @@ if debug:
 						# If requested, write the attachment into a file in the current working directory, given by filename specified in the mail.
 						# This option is only available io manual analysis mode, specifying a single mail message file.
 						with open(att["filename"], 'wb') as attachment_file:
-							attachment_file.write(att["payload"])
+							attachment_file.write(att["payload"].replace("..", "_").replace("/", "_"))
 
 			# Print extracted URLs.
 			if "extracted_urls" in result:

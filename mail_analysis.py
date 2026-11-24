@@ -10,6 +10,7 @@ import hashlib
 import base64
 import ipaddress
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 
 # The mail headers normally include a charset but this may either not be available in Python, or not work for some reason.
 # Therefore, we define a default fallback charset which we will use in case the specified one fails.
@@ -101,13 +102,34 @@ def scan_body_for_btc_addrs(body):
 # Scans message body for URLs.
 def scan_body_for_urls(body, dnsfilter_domain_rankings):
 	# Scan for URLs in the message body (only returns URLs prefixed with http or https.
-	url_regex = r"\b((?:https?://)(?:(?:www\.)?(?:[\da-z\.-]+)\.(?:[a-z]{2,6})|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])))(?::[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])?(?:/[\w\.-]*)*/?)\b"
+	url_regex = r"\b((?:h[tx]{2}ps?://)(?:(?:www\.)?(?:[\da-z\.-]+)\.(?:[a-z]{2,6})|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])))(?::[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])?(?:/[\w\.-]*)*/?)\b"
 	matches = re.findall(url_regex, body)
+
+	# Extract links from body using BeautifulSoup as well. The regex might miss some things, but the HTML parser only strictly picks up
+	# values inside <a> tags with a 'href' value. Therefore, these two methods complement each other.
+	soup = BeautifulSoup(body, 'lxml')
+	html_links = soup.find_all("a")
+	for link in html_links:
+		# Extract href value from link object.
+		href_value = link.get("href")
+
+		# Skip href links that do not follow an external path.
+		if not href_value or href_value.startswith("mailto") or href_value.startswith("#"):
+			continue
+
+		# Append to the set of matches to include it in processing.
+		matches.append(href_value)
 
 	# Look up all matches in the DNSFilter domain ranking and filter out any URLs having a domain that is on the list.
 	filtered_matches = set()
 	total_urls = 0
 	for url in matches:
+		# No need to dissect the URL if it is already present in the filtered matches set. We do need to count the total number of URLs.
+		# We will probably count some doubles where BeautifulSoup and regex matching overlap, but that is not a problem.
+		if url in filtered_matches:
+			total_urls += 1
+			continue
+
 		# Extract the domain from the URL.
 		obj = urlparse(url)
 		tld_obj = tldextract.extract(obj.netloc)
@@ -173,8 +195,8 @@ def is_bounced_undeliverable(subject):
 	lower_subject = str(subject).lower()
 	return True if (lower_subject.startswith("undeliverable:") or lower_subject.startswith("undelivered") or lower_subject.startswith("mail delivery failed")
 		or lower_subject.startswith("returned mail:") or lower_subject == "delivery status notification (failure)"
-		or lower_subject == "failure notice" or lower_subject.startswith("delivery failure") or lower_subject == ""
-		or lower_subject == "successful mail delivery report" or lower_subject.startswith("delivery Notification:")
+		or lower_subject == "failure notice" or lower_subject.startswith("delivery failure")
+		or lower_subject == "successful mail delivery report" or lower_subject.startswith("delivery notification:")
 		or lower_subject == "delivery failure notification" or lower_subject == "permanent error") else False
 
 # Decodes a mail message body or body part.
@@ -345,7 +367,7 @@ def analyze_mail_message(msg_bytes, dnsfilter_domain_rankings, total_num_url_thr
 
 	# Try to detect whether the mail is bounced for being undeliverable. We have much useful information in those mails but the subject
 	# and other primary mail headers cannot be used as the useful stuff resides in the original mail in the body.
-	result["bounced"] = True if is_bounced_undeliverable(message["Subject"]) else False
+	result["bounced"] = True if is_bounced_undeliverable(result["subject"]) else False
 
 	# Walk the mail content, if multipart, all parts.
 	attachments = []
