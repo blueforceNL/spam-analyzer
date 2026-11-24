@@ -22,6 +22,7 @@ import urllib.request
 import json
 import codecs
 from bs4 import BeautifulSoup
+from contextlib import closing
 from systemd import journal
 from configparser import ConfigParser
 from analyzer_config import load_or_create_config
@@ -36,17 +37,22 @@ DNSFILTER_PULL_LATEST_SCRIPT_FILENAME = "analysis/get_dnsfilter_latest.sh"
 
 # Executes a mutation query (INSERT, UPDATE, etc) to the MySQL database server. Requires to be parameterized for SQL injection protection.
 def execute_mutation_sql_query(db, q, params):
-	cursorObject = db.cursor()
-	cursorObject.execute(q, params)
-	db.commit()
-	return cursorObject.lastrowid
+	with closing(db.cursor()) as cursorObject:
+		try:
+			cursorObject.execute(q, params)
+			db.commit()
+			return cursorObject.lastrowid
+		except Exception:
+			db.rollback()
+			raise
 
 # Executes a SELECT query that returns results. Also a parameterized function to safeguard against SQL injection.
 def execute_select_sql_query(db, q, params):
-	cursorObject = db.cursor(buffered=True)
-	cursorObject.execute(q, params)
-	db.commit()
-	return cursorObject.fetchall()
+	with closing(db.cursor(buffered=True)) as cursorObject:
+		cursorObject.execute(q, params)
+		rows = cursorObject.fetchall()
+		db.commit()
+		return rows
 
 # -----------------------------------------------------------
 
@@ -671,7 +677,7 @@ else:
 									with open(os.path.join(attachments_dir, disk_attachment_filename), 'wb') as attachment_file:
 										attachment_file.write(attach_obj["payload"])
 
-									# At this point we have an attachment. If the MIME-type is not an image, schedule an upload externally.
+									# At this point we have an attachment. If the MIME-type is considered for further analysis, schedule an upload externally.
 									query = "INSERT INTO attachment_upload_queue (attachment_id,mail_id) VALUES (%s,%s)"
 									execute_mutation_sql_query(database, query, (attachment_id, inserted_mail_id))
 
