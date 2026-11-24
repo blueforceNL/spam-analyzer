@@ -25,9 +25,9 @@ def execute_mutation_sql_query(db, q, params):
 	return cursorObject.lastrowid
 
 # Executes a SELECT query that returns results.
-def execute_select_sql_query(db, q):
+def execute_select_sql_query(db, q, params):
 	cursorObject = db.cursor(buffered=True)
-	cursorObject.execute(q)
+	cursorObject.execute(q, params)
 	db.commit()
 	return cursorObject.fetchall()
 
@@ -50,7 +50,7 @@ date_time = datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S")
 try:
 	config_object = load_or_create_config()
 	analyzer_config = config_object["ANALYZER"]
-except KeyError:
+except (KeyError, NameError):
 	logger.error("ERROR (%s): Could not open config file, one or more required key/value pairs are missing! Review the config file and try again." % date_time)
 	exit(1)
 
@@ -61,7 +61,7 @@ database = connect_mysql_database(analyzer_config["database_addr"], analyzer_con
 attachments_dir = analyzer_config["attachments_dir"]
 
 # Extract entries from the DropperBox queue in the database. Select at most 60 entries, which would be one per five seconds if the job runs once every five minutes.
-queue_result = execute_select_sql_query(database, "SELECT attachment_upload_queue.id,analyzed_mail.filename,mail_attachment_link.filename,filename_on_disk,mime_types.description FROM attachment_upload_queue JOIN analyzed_mail ON analyzed_mail.id = attachment_upload_queue.mail_id JOIN mail_attachment_link ON mail_attachment_link.attachment_id = attachment_upload_queue.attachment_id AND mail_attachment_link.mail_id = attachment_upload_queue.mail_id JOIN potentially_malicious_attachments ON potentially_malicious_attachments.id = attachment_upload_queue.attachment_id JOIN mime_types ON mime_types.id = mime_type_id LIMIT 10")
+queue_result = execute_select_sql_query(database, "SELECT attachment_upload_queue.id,analyzed_mail.filename,mail_attachment_link.filename,filename_on_disk,mime_types.description FROM attachment_upload_queue JOIN analyzed_mail ON analyzed_mail.id = attachment_upload_queue.mail_id JOIN mail_attachment_link ON mail_attachment_link.attachment_id = attachment_upload_queue.attachment_id AND mail_attachment_link.mail_id = attachment_upload_queue.mail_id JOIN potentially_malicious_attachments ON potentially_malicious_attachments.id = attachment_upload_queue.attachment_id JOIN mime_types ON mime_types.id = mime_type_id LIMIT 10", ())
 
 # Check whether at least one entry is there to be uploaded. If there is nothing, we don't need to open a connection either.
 if len(queue_result) > 0:
@@ -122,6 +122,6 @@ else:
 	print("INFO (%s): Nothing to do, no new entries found in spam-analyzer database." % date_time)
 
 # Check how many entries remain in the queue.
-queue_result = execute_select_sql_query(database, "SELECT COUNT(*) FROM attachment_upload_queue")
+queue_result = execute_select_sql_query(database, "SELECT COUNT(*) FROM attachment_upload_queue", ())
 count_entry = queue_result[0]
 print("INFO (%s): %i entries remaining in queue." % (date_time, count_entry[0]))

@@ -79,17 +79,6 @@ def obtain_version_number():
 		version = 0
 	return version
 
-# Attempt connection to the MySQL database server.
-def connect_mysql_database(server, dbname, user, passwd):
-	try:
-		database = mysql.connector.connect(host=analyzer_config["database_addr"], user=analyzer_config["database_user"],
-			passwd=analyzer_config["database_passwd"], database=analyzer_config["database_name"], connect_timeout=10)
-	except mysql.connector.Error:
-		return None
-
-	# Check and print connection info.
-	return database if database.is_connected() else None
-
 # Parses HTML from an email and extracts the text, currently for debug purposes.
 def bs_extract_text_from_html(html):
 	# Parse the HTML with BeautifulSoup.
@@ -357,10 +346,15 @@ if debug:
 else:
 	# Create connection to MySQL database.
 	logger.info("Connecting to MySQL database server at: %s" % analyzer_config["database_addr"])
-	database = connect_mysql_database(analyzer_config["database_addr"], analyzer_config["database_name"], analyzer_config["database_user"], analyzer_config["database_passwd"])
-	if database is not None:
-		logger.info("Successfully connected to MySQL database at %s!" % analyzer_config["database_addr"])
-	else:
+	try:
+		database = mysql.connector.connect(host=analyzer_config["database_addr"], user=analyzer_config["database_user"],
+			passwd=analyzer_config["database_passwd"], database=analyzer_config["database_name"], connect_timeout=10)
+		if database.is_connected():
+			logger.info("Successfully connected to MySQL database at %s!" % analyzer_config["database_addr"])
+		else:
+			logger.error("Failed to connect to MySQL server at: %s!" % analyzer_config["database_addr"])
+			exit(1)
+	except mysql.connector.Error:
 		logger.error("Failed to connect to MySQL server at: %s!" % analyzer_config["database_addr"])
 		exit(1)
 
