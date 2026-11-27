@@ -252,6 +252,7 @@ CREATE TABLE mail_classifications(
 # Implemented classifications in the classifier. They must be present in the database beforehand.
 INSERT INTO mail_classifications (name,description,store_message_file) VALUES ("scam_generic","Common Bitcoin scam mails about hacked accounts or fake blackmail",0);
 INSERT INTO mail_classifications (name,description,store_message_file) VALUES ("advertisement","Collection of unwanted advertisement mails, for example about viagra",0);
+INSERT INTO mail_classifications (name,description,store_message_file) VALUES ("heuristic","Detection of spam mails using heuristics and scoring",0);
 
 # Stores links between a mail message and a classifier detection.
 CREATE TABLE mail_classifications_link(
@@ -345,6 +346,9 @@ CREATE TABLE enricher_queue(
 	FOREIGN KEY(mail_id) REFERENCES analyzed_mail(id)
 );
 
+# Creates index on checksum so we can perform a quick lookup there.
+ALTER TABLE enricher_queue ADD INDEX (checksum);
+
 # This table contains inactive queue entries. When the quota for a specific enricher is used for the day, the
 # enricher will loop the mnain queue forever and places inactive entries at the back of the queue until it reaches
 # them again. This situation will give unnecessary overhead at scale and therefore, we place inactive entries in
@@ -360,6 +364,9 @@ CREATE TABLE inactive_enricher_queue(
 	PRIMARY KEY(id),
 	FOREIGN KEY(mail_id) REFERENCES analyzed_mail(id)
 );
+
+# Creates index on checksum so we can perform a quick lookup there.
+ALTER TABLE inactive_enricher_queue ADD INDEX (checksum);
 
 # Table that stores up-to-date quotas and other metadata for enrichment sources.
 # This table is updated on every request performed.
@@ -402,6 +409,9 @@ CREATE TABLE vpnapi(
 	PRIMARY KEY(id)
 );
 
+# Creates index on IP address so we can perform a quick lookup there.
+ALTER TABLE vpnapi ADD INDEX (ip_address);
+
 # Table to store IPIntel enrichment results.
 CREATE TABLE ipintel(
 	id INT NOT NULL AUTO_INCREMENT,
@@ -410,6 +420,9 @@ CREATE TABLE ipintel(
 	value FLOAT NOT NULL,
 	PRIMARY KEY(id)
 );
+
+# Creates index on IP address so we can perform a quick lookup there.
+ALTER TABLE ipintel ADD INDEX (ip_address);
 
 # Table to store IP2Proxy enrichment results.
 CREATE TABLE ip2proxy(
@@ -421,3 +434,6 @@ CREATE TABLE ip2proxy(
 	country_name VARCHAR(128),
 	PRIMARY KEY(id)
 );
+
+# Creates index on IP address so we can perform a quick lookup there.
+ALTER TABLE ip2proxy ADD INDEX (ip_address);
